@@ -1,0 +1,160 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /otp_codes/{docId} {
+      allow read, write: if false;
+    }
+    match /vendors/{uid} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ── Gating "compte bloqué" (ajout — Partie 5/8, Volet 2/4) ────────────
+    // Miroir Firestore Rules de kazapP8_normalizePlan / kazapP8_isPlanActive
+    // (index.html), lui-même aligné sur la logique de blocage des Parties
+    // 2/8 et 3/8. Recalculée ici indépendamment du client, uniquement à
+    // partir des champs plan, planActivatedAt, planExpiresAt (et createdAt
+    // en repli pour l'essai) du document vendors/{vendorId} concerné.
+    function _vendorData(vendorId) {
+      return get(/databases/$(database)/documents/vendors/$(vendorId)).data;
+    }
+
+    function _planNormalise(vendor) {
+      let raw = vendor.get('plan', 'free');
+      let plansValides = ['basique', 'pro', 'premium', 'trial', 'free'];
+      let planActivatedAt = vendor.get('planActivatedAt', null);
+      // Miroir kazapP8_normalizePlan : valeur inconnue -> 'free' ;
+      // ancien 'free' sans planActivatedAt -> 'trial'.
+      return !(raw in plansValides)
+        ? 'free'
+        : (raw == 'free' && planActivatedAt == null ? 'trial' : raw);
+    }
+
+    // Essai (trial/free) : actif tant que < 14 jours après la date de
+    // référence, avec repli planActivatedAt -> createdAt (même ordre de
+    // priorité que kazapP12_getTrialReferenceMs). Aucune date connue ->
+    // jamais bloqué par défaut (comportement permissif miroir du client).
+    function _essaiActif(vendor) {
+      let planActivatedAt = vendor.get('planActivatedAt', null);
+      let createdAt = vendor.get('createdAt', null);
+      let ref = planActivatedAt != null ? planActivatedAt : createdAt;
+      return ref == null || request.time < ref + duration.value(14, 'd');
+    }
+
+    // Plan payant (basique/pro/premium) : actif tant que planExpiresAt
+    // n'est pas dépassé. planExpiresAt absent -> permissif (on n'invente
+    // jamais de blocage, miroir de kazapP8_isPlanActive).
+    function _planPayantActif(vendor) {
+      let exp = vendor.get('planExpiresAt', null);
+      return exp == null || request.time <= exp;
+    }
+
+    function _compteVendeurActif(vendorId) {
+      let vendor = _vendorData(vendorId);
+      let plan = _planNormalise(vendor);
+      return (plan == 'trial' || plan == 'free')
+        ? _essaiActif(vendor)
+        : _planPayantActif(vendor);
+    }
+    // ── Fin ajout gating "compte bloqué" ────────────────────────────────
+
+    // ── Gating catalogue produits (Partie 6/8 — corrigé) ────────────────────
+    // Miroir serveur de kazapP10_PRODUCT_LIMITS + du patch d'essai
+    // kazapP12_patchProductLimit (index.html) :
+    //   basique = 10, pro = 50, premium = illimité,
+    //   trial/free PENDANT l'essai actif (14j) = illimité (accès Premium
+    //   complet pendant l'essai, comme _accesIAAutorise côté serveur/index.html),
+    //   trial/free APRÈS expiration de l'essai = 10 (repli Basique).
+    // Réutilise _planNormalise et _essaiActif (définies ci-dessus pour le
+    // gating "compte bloqué") plutôt que de relire le champ 'plan' brut une
+    // seconde fois avec sa propre logique : évite que les deux gatings
+    // divergent silencieusement l'un de l'autre au fil des évolutions.
+    //
+    // [Avant correctif] _productPlanLimit lisait vendor.get('plan','free')
+    // directement et ne connaissait pas l'essai actif : un compte en essai
+    // (trial/free) était donc plafonné à 10 produits par cette règle, alors
+    // que index.html annonce "illimité" pendant l'essai (kazapP12_patchProductLimit)
+    // et que le formulaire client ne bloquait donc pas l'ajout — la création
+    // échouait silencieusement côté Firestore dès le 11e produit pendant un
+    // essai actif légitime.
+    function _productPlanLimit(vendorId) {
+      let vendor = _vendorData(vendorId);
+      let plan = _planNormalise(vendor);
+      return (plan == 'trial' || plan == 'free') && _essaiActif(vendor)
+        ? 999999
+        : (plan == 'premium' ? 999999 : (plan == 'pro' ? 50 : 10));
+    }
+
+    function _productCurrentCount(vendorId) {
+      return _vendorData(vendorId).get('productCount', 0);
+    }
+
+    function _sousLimiteProduits(vendorId) {
+      return _productCurrentCount(vendorId) < _productPlanLimit(vendorId);
+    }
+    // ── Fin gating catalogue produits ───────────────────────────────────────
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.vendorId
+        && _compteVendeurActif(request.resource.data.vendorId)
+        && _sousLimiteProduits(request.resource.data.vendorId);
+      allow update, delete: if request.auth != null
+        && request.auth.uid == resource.data.vendorId
+        && _compteVendeurActif(resource.data.vendorId);
+    }
+
+    match /orders/{orderId} {
+      // Création par l'acheteur (souvent non authentifié) : on ne peut pas
+      // vérifier de propriété, seulement que le compte du vendeur ciblé
+      // n'est pas bloqué (ajout — Partie 5/8, Volet 2/4).
+      allow create: if _compteVendeurActif(request.resource.data.vendorId);
+      allow read: if request.auth != null && request.auth.uid == resource.data.vendorId;
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.vendorId
+        && _compteVendeurActif(resource.data.vendorId);
+    }
+
+    match /appointments/{apptId} {
+      allow create: if true;
+      allow read, update: if request.auth != null && request.auth.uid == resource.data.vendorId;
+    }
+
+    // ── Factures (existant, inchangé) ───────────────────────────────────────
+    // Écriture déjà interdite côté client dans tous les cas (génération
+    // exclusivement backend via Admin SDK, qui contourne ces règles) :
+    // la condition "compte non bloqué" est donc déjà satisfaite de façon
+    // triviale et plus stricte que nécessaire. Aucun changement requis ici
+    // pour ce volet.
+    match /invoices/{invoiceId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.vendorId;
+      allow write: if false;
+    }
+    // ── Fin factures ─────────────────────────────────────────────────────────
+
+    match /conversations/{conversationId} {
+      // Création par l'acheteur (souvent non authentifié) : vérifie
+      // uniquement que le compte du vendeur ciblé n'est pas bloqué
+      // (ajout — Partie 5/8, Volet 2/4).
+      allow create: if _compteVendeurActif(request.resource.data.vendorId);
+      allow read: if request.auth != null && request.auth.uid == resource.data.vendorId;
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.vendorId
+        && _compteVendeurActif(resource.data.vendorId);
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        // Création libre (acheteur et vendeur), gatée par le statut du
+        // compte du vendeur propriétaire de la conversation parente
+        // (ajout — Partie 5/8, Volet 2/4).
+        allow create: if _compteVendeurActif(
+          get(/databases/$(database)/documents/conversations/$(conversationId)).data.vendorId
+        );
+        allow update, delete: if false;
+        allow read: if request.auth != null
+          && request.auth.uid == get(/databases/$(database)/documents/conversations/$(conversationId)).data.vendorId;
+      }
+    }
+  }
+}

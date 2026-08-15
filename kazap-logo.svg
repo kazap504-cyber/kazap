@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254">
+  <defs>
+    <style>
+      .wordmark { font-family: 'Poppins', 'Arial Black', sans-serif; font-weight: 700; }
+    </style>
+  </defs>
+  <text x="627" y="640" text-anchor="middle" class="wordmark" font-size="230" letter-spacing="4" fill="#0B1626">KAZAP</text>
+  <rect x="247" y="700" width="370" height="18" fill="#00B994"/>
+  <rect x="637" y="700" width="370" height="18" fill="#E7B044"/>
+</svg>

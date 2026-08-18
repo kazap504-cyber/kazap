@@ -21,7 +21,7 @@
 // kazapSwCacheName — nom du cache, versionné. Incrémenter (v2, v3, ...)
 // à chaque changement de la liste KAZAP_SW_PRECACHE_URLS pour forcer
 // le renouvellement du cache chez les utilisateurs déjà installés.
-const KAZAP_SW_CACHE_NAME = 'kazap-pwa-v1';
+const KAZAP_SW_CACHE_NAME = 'kazap-pwa-v1 18/08/2026';
 
 // KAZAP_SW_PRECACHE_URLS — coquille minimale mise en cache à l'installation.
 // PWA-2 (2026-08-15) — Chemins relatifs (sans "/" initial) : résolus depuis

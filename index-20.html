@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAZAP — Boutique · IA · Agenda. Tout en un.</title>
+<!-- LOADER-EXTRACT-01 (2026-08-29) — Ce fichier est désormais le point d'entrée
+     réel de l'application (index.html), extrait de l'ancien fichier unique.
+     Son seul rôle : afficher instantanément le splash KAZAP (identique à
+     l'écran de chargement historique) pendant que app.html (l'application
+     complète : landing + tableau de bord) se charge en arrière-plan, puis
+     rediriger vers app.html en conservant query string et hash éventuels.
+     Aucune logique d'authentification ici : app.html gère seul la connexion
+     Firebase, l'affichage landing/dashboard, et son propre filet de sécurité
+     4s (comportement strictement inchangé côté app.html).
+     Rappel comportemental attendu après ce découpage :
+       - Non connecté  : loader (ce fichier) → app.html → landing → connexion → dashboard
+       - Déjà connecté : loader (ce fichier) → app.html → dashboard directement
+       - Rafraîchissement sur le dashboard : reste sur app.html, ne repasse
+         jamais par ce loader (la barre d'adresse pointe déjà vers app.html
+         après la redirection ci-dessous, qui utilise location.replace pour
+         ne pas laisser d'entrée d'historique vers ce fichier).
+     Dépendance externe non vérifiable ici (fichier non fourni) : si sw.js
+     contient une règle de cache spécifique à "index.html", vérifier qu'elle
+     reste cohérente avec ce nouveau fichier (désormais index.html) et avec
+     app.html. -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#F6F5F7">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="152x152" href="apple-touch-icon-152.png">
+<link rel="apple-touch-icon" sizes="120x120" href="apple-touch-icon-120.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="KAZAP">
+<link rel="apple-touch-startup-image" href="splash-iphone.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&display=swap" rel="stylesheet">
+<style>
+:root {
+ --orange: #C8763A;
+ --cream: #F7F8FA;
+ --ink: #16283D;
+ --font-head: 'Inter', sans-serif;
+ --font-body: 'Inter', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-body); background: var(--cream); color: var(--ink); font-size: 16px; line-height: 1.6; overflow-x: hidden; overflow: hidden; }
+#app-loader {
+ position: fixed; inset: 0; background: #ffffff;
+ z-index: 9999; display: flex; flex-direction: column;
+ align-items: center; justify-content: center; gap: 24px;
+ transition: opacity 0.4s;
+ height: 100vh; height: 100dvh; overscroll-behavior: contain;
+}
+#app-loader .loader-entrepreneur { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; width: 100%; height: 100%; }
+.loader-logo { font-family: var(--font-head); font-size: 2.5rem; font-weight: 800; letter-spacing: -0.03em; }
+.loader-bar { width: 200px; height: 3px; background: rgba(0,0,0,0.1); border-radius: 2px; overflow: hidden; }
+.loader-bar-fill { height: 100%; width: 0; background: var(--orange); border-radius: 2px; animation: loadFill 2.5s ease forwards; }
+@keyframes loadFill { to { width: 100%; } }
+.loader-text { font-size: 0.82rem; color: rgba(0,0,0,0.4); }
+</style>
+</head>
+<body>
+<!-- APP LOADER (copie exacte du loader historique — cf. app.html pour la version
+     utilisée pendant la vérification d'authentification) -->
+<div id="app-loader">
+ <div class="loader-entrepreneur">
+ <div class="loader-logo"><img class="kazap-logo-img" src="data:image/png;base64,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" alt="KAZAP" style="height:56px;width:auto;display:block;visibility:visible;"></div>
+ <div class="loader-bar"><div class="loader-bar-fill"></div></div>
+ <div class="loader-text">Chargement de votre espace entrepreneur…</div>
+ </div>
+</div>
+<script>
+// Redirection immédiate vers l'application complète (app.html), en
+// conservant query string et hash pour les liens profonds éventuels.
+// location.replace() : pas d'entrée d'historique pour ce fichier, donc le
+// bouton "précédent" depuis app.html ne revient jamais ici, et un
+// rafraîchissement sur app.html ne repasse jamais par ce loader.
+(function () {
+ location.replace('app.html' + window.location.search + window.location.hash);
+})();
+</script>
+</body>
+</html>

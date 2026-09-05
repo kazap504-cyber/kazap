@@ -23,7 +23,7 @@
 // le renouvellement du cache chez les utilisateurs déjà installés.
 // [REVERT-SPLIT-01] (2026-08-29) — Retour à un fichier unique (index.html) :
 // app.html est retiré de la coquille précachée, il n'existe plus.
-const KAZAP_SW_CACHE_NAME = 'kazap-pwa-v4 02/09/2026';
+const KAZAP_SW_CACHE_NAME = 'kazap-pwa-v1 05/09/2026';
 
 // KAZAP_SW_PRECACHE_URLS — coquille minimale mise en cache à l'installation.
 // PWA-2 (2026-08-15) — Chemins relatifs (sans "/" initial) : résolus depuis

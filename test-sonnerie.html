@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KAZAP - Test sonnerie</title>
+<style>
+  body { font-family: Helvetica, Arial, sans-serif; margin: 0; padding: 18px; background: #fff; color: #000; line-height: 1.4; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p { margin: 6px 0; font-size: 14px; }
+  button { display: block; width: 100%; padding: 16px; margin: 12px 0 4px; font-size: 16px; font-weight: bold; border: 2px solid #000; background: #fff; color: #000; border-radius: 10px; }
+  button:active { background: #000; color: #fff; }
+  pre { border: 1px solid #000; border-radius: 8px; padding: 10px; font-size: 13px; white-space: pre-wrap; word-break: break-word; margin: 8px 0; min-height: 40px; }
+  .t { font-weight: bold; margin-top: 16px; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>KAZAP - Test sonnerie</h1>
+<p>Ouvrez cette page sur le téléphone du vendeur. Touchez chaque bouton, puis notez ce qui s'affiche dans les cadres.</p>
+
+<div class="t">Informations sur le téléphone</div>
+<pre id="info">...</pre>
+
+<button id="b1" type="button">1. Tester le son</button>
+<pre id="r1">Pas encore testé.</pre>
+
+<button id="b2" type="button">2. Tester la vibration</button>
+<pre id="r2">Pas encore testé.</pre>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var audio = null;
+
+  var mode = 'navigateur';
+  try { if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) mode = 'application installée'; } catch (e) { /* ignore */ }
+  var AC = window.AudioContext || window.webkitAudioContext;
+  $('info').textContent =
+    'Mode : ' + mode + '\n' +
+    'Audio web disponible : ' + (AC ? 'oui' : 'non') + '\n' +
+    'Vibration disponible : ' + (typeof navigator.vibrate === 'function' ? 'oui' : 'non') + '\n' +
+    'Navigateur : ' + (navigator.userAgent || '').slice(0, 120);
+
+  function bip(freq, duree) {
+    var o = audio.createOscillator(), g = audio.createGain(), t0 = audio.currentTime;
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.4, t0 + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + duree);
+    o.connect(g); g.connect(audio.destination);
+    o.start(t0); o.stop(t0 + duree + 0.02);
+  }
+
+  $('b1').addEventListener('click', function () {
+    var out = [];
+    try {
+      if (!AC) { $('r1').textContent = 'Échec : audio web indisponible sur ce navigateur.'; return; }
+      if (!audio) audio = new AC();
+      out.push('Etat avant : ' + audio.state);
+      var suite = function () {
+        out.push('Etat après : ' + audio.state);
+        try {
+          bip(880, 0.35);
+          setTimeout(function () { try { bip(660, 0.35); } catch (e) { /* ignore */ } }, 420);
+          out.push('Deux tons envoyés. Entendez-vous un son ? (volume média monté)');
+        } catch (e) { out.push('Erreur à la lecture : ' + (e && e.message)); }
+        $('r1').textContent = out.join('\n');
+      };
+      if (audio.state === 'suspended') {
+        audio.resume().then(suite, function (e) { out.push('Reprise refusée : ' + (e && e.message)); $('r1').textContent = out.join('\n'); });
+      } else { suite(); }
+    } catch (e) {
+      $('r1').textContent = 'Erreur : ' + (e && e.message);
+    }
+  });
+
+  $('b2').addEventListener('click', function () {
+    try {
+      if (typeof navigator.vibrate !== 'function') { $('r2').textContent = 'Vibration non prise en charge par ce navigateur.'; return; }
+      var ok = navigator.vibrate([300, 150, 300]);
+      $('r2').textContent = 'Réponse du navigateur : ' + (ok ? 'vibration acceptée' : 'vibration refusée') + '\nRessentez-vous une vibration ?';
+    } catch (e) {
+      $('r2').textContent = 'Erreur : ' + (e && e.message);
+    }
+  });
+})();
+</script>
+</body>
+</html>
